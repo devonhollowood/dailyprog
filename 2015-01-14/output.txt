@@ -1,0 +1,64 @@
+    A M 0800:
+        South Acorn Drive (A->B)
+        West Pine Road (B->G)
+        Almond Way (G->F)
+        Central Avenue (F->K)
+        North Peanut Lane (K->L)
+        East Elm Street (L->M)
+        Total time: 44 minutes.
+    A M 1200:
+        South Acorn Drive (A->B)
+        Acorn Drive (B->C)
+        West Central Avenue (C->F)
+        Central Avenue (F->K)
+        North Peanut Lane (K->L)
+        East Elm Street (L->M)
+        Total time: 36 minutes.
+    A M 1800:
+        South Acorn Drive (A->B)
+        West Pine Road (B->G)
+        Pine Road (G->J)
+        Peanut Lane (J->K)
+        North Peanut Lane (K->L)
+        East Elm Street (L->M)
+        Total time: 42 minutes.
+    A M 2200:
+        South Acorn Drive (A->B)
+        Acorn Drive (B->C)
+        West Central Avenue (C->F)
+        Central Avenue (F->K)
+        North Peanut Lane (K->L)
+        East Elm Street (L->M)
+        Total time: 36 minutes.
+    P D 0800:
+        South Walnut (P->O)
+        East Pine Road (O->J)
+        Peanut Lane (J->K)
+        Central Avenue (K->F)
+        North Almond Way (F->E)
+        West Elm Street (E->D)
+        Total time: 43 minutes.
+    P D 1200:
+        South Walnut (P->O)
+        East Pine Road (O->J)
+        Peanut Lane (J->K)
+        Central Avenue (K->F)
+        North Almond Way (F->E)
+        West Elm Street (E->D)
+        Total time: 38 minutes.
+    P D 1800:
+        South Walnut (P->O)
+        East Pine Road (O->J)
+        Peanut Lane (J->K)
+        Central Avenue (K->F)
+        North Almond Way (F->E)
+        West Elm Street (E->D)
+        Total time: 43 minutes.
+    P D 2200:
+        South Walnut (P->O)
+        East Pine Road (O->J)
+        Peanut Lane (J->K)
+        Central Avenue (K->F)
+        North Almond Way (F->E)
+        West Elm Street (E->D)
+        Total time: 35 minutes.
