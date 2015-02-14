@@ -5,8 +5,7 @@
 #include <algorithm>
 #include <functional>
 
-template <typename ValType, size_t NQueues, typename PriorityType, 
-         typename Comparator>
+template <typename ValType, size_t NQueues, typename PriorityType>
 class NPriorityQueue{
 public:
     //types
