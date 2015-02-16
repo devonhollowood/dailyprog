@@ -5,7 +5,7 @@
 using namespace std;
 
 void fill(NPriorityQueue<char, 3, float>& npq){
-    cout << "filling" << endl;
+    cout << "filling." << endl;
     npq.enqueue('A', {{20, 2,11}});
     npq.enqueue('A', {{26,10,15}});
     npq.enqueue('C', {{15,30, 7}});
@@ -50,7 +50,7 @@ void test_clear(NPriorityQueue<char, 3, float>& npq){
 template<size_t N>
 void dequeue_all(NPriorityQueue<char, 3, float>& npq){
     cout << "count = " << npq.count() << endl;
-    cout << "dequeueing" << endl;
+    cout << "dequeueing list " << N << '.' << endl;
     while(npq.count()!=0){
         cout << npq.dequeue<N>() << flush;
     }
