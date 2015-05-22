@@ -20,6 +20,8 @@ void test_truthiness(std::string repr, T t) {
     std::cout << std::setw(15) << repr << ": " << truthiness(t) << std::endl;
 }
 
+struct my_struct{};
+
 int main(){
     test_truthiness("\"Hello World\"", "Hello World");
     test_truthiness("\"\"", "");
@@ -30,4 +32,5 @@ int main(){
     test_truthiness("&main", &main);
     test_truthiness("true", true);
     test_truthiness("false", false);
+    test_truthiness("Empty Struct", my_struct{});
 }
