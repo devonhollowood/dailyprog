@@ -27,6 +27,7 @@ int main(){
     test_truthiness("\"\"", "");
     test_truthiness("\'0\'", '0');
     test_truthiness("1", 1);
+    test_truthiness("0", 0);
     test_truthiness("0.0", 0.0);
     test_truthiness("nullptr", nullptr);
     test_truthiness("&main", &main);
