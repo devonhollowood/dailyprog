@@ -1,8 +1,10 @@
-import Data.Vector (Vector, fromList, toList, (//), (!))
+import Data.Vector (Vector, fromList, toList, (//), (!), thaw, freeze)
+import qualified Data.Vector.Mutable as M
 import System.Environment (getArgs)
 import System.IO (openFile, IOMode (..), hClose, hGetLine)
 import Control.Exception (bracket)
 import Control.Monad (replicateM)
+import Control.Monad.ST (runST)
 
 type Switch = (Int, Int)
 type SwitchBoard = [Switch]
@@ -17,14 +19,14 @@ main = do
 
 -- Applies SwitchBoard to Elements
 apply :: Elements -> SwitchBoard -> Elements
-apply els [] = els
-apply els (switch:switches) = apply (els // swap) switches
-    where swap = makeSwap els switch
-          makeSwap els s
-              | elA > elB = [(posA, elB), (posB, elA)] --swap case
-              | otherwise = []
-              where (posA, posB) = s
-                    (elA, elB) = (els ! posA, els ! posB)
+apply els board = runST $ do
+    mels <- thaw els
+    mapM_ (maybe_swap mels) board
+    freeze mels
+    where maybe_swap mels (posA, posB) = do
+              elA <- mels `M.read` posA
+              elB <- mels `M.read` posB
+              if elA > elB then M.swap mels posA posB else return ()
 
 -- Generates tests for an switchboard with nwires wires
 generateTests :: Int -> [Elements]
