@@ -1,8 +1,9 @@
 import System.IO (hFlush, stdout)
 import System.Random
-import Data.List (intersperse, sortBy, sort, tails, groupBy)
+import Data.List (intercalate, sortBy, sort, tails, groupBy)
 import Data.Maybe (catMaybes)
 import Data.Ord (comparing)
+import Data.Char (toLower)
 import Text.Read (readEither)
 import Control.Monad (forM_)
 import Control.Monad.State
@@ -14,25 +15,88 @@ import qualified Data.Vector.Mutable as MV
 
 main = do
     nplayers <- prompt validate "How many players?"
+    let player_types = Human:replicate (nplayers-1) CPU
     gen <- getStdGen
     let deck = evalState (shuffle newDeck) gen
-    let deal = runEitherT (dealTexasHoldem nplayers)
-    case evalState deal deck of
+    let try_deal = runEitherT (dealTexasHoldem player_types)
+    case evalState try_deal deck of
         Left _  -> putStrLn "Error: Not enough cards for that many players!"
-        Right d -> output d
+        Right (players, deal) -> evalStateT (runRound deal) players
     where validate s = readEither s >>= check_positive
           check_positive n = if n >= 2 && n <= 8
                              then Right n
                              else Left "Must be 2-8 players."
 
--- Outputs a TexasHoldemDeal
-output :: TexasHoldemDeal -> IO ()
-output deal = do
-    putStrLn $ "Your hand: " ++ showmany (head $ hands deal)
-    putStrLn $ "Flop: " ++ showmany (flop deal)
-    putStrLn $ "Turn: " ++ show (turn deal)
-    putStrLn $ "River: " ++ show (river deal)
-    where showmany = concat . intersperse ", " . map show
+-- Run a round of texas hold'em
+runRound :: TexasHoldemDeal -> StateT [Player] IO ()
+runRound deal = do
+    do_turn []
+    liftIO . putStrLn $ "Flop: " ++ showMany (flop deal)
+    do_turn (flop deal)
+    liftIO . putStrLn $ "Turn: " ++ show (turn deal)
+    do_turn (flop deal ++ [turn deal])
+    liftIO . putStrLn $ "River: " ++ show (river deal)
+    do_turn (flop deal ++ [turn deal, river deal])
+    players <- get
+    liftIO $ displayWinner players (flop deal ++ [turn deal, river deal])
+    where not_folded = not . playerFolded
+          do_turn cs = get >>= liftIO . mapM (takeTurn cs) >>= put
+
+-- Displays the winner
+displayWinner :: [Player] -> [Card] -> IO ()
+displayWinner players table_cards = do
+    let remaining = filter (not . playerFolded) players
+    mapM put_hand remaining
+    let player_ranks = descendingBy (comparing p_hand) players
+    case winners player_ranks of
+        [x] -> putStrLn $ concat [p_name (head player_ranks), " wins!"]
+        xs  -> putStrLn $ intercalate ", " (map p_name xs)
+                          ++ " tie and split the pot!"
+    where put_hand p = putStrLn $ concat [p_name p, " has ", show (p_hand p)]
+          p_name p = playerName p
+          p_hand p = bestHand $ playerHand p ++ table_cards
+          winners (x:xs) = x:takeWhile (\p -> comparing p_hand p x == EQ) xs
+
+-- Take the appropriate Human/CPU turn for player
+takeTurn :: [Card] -> Player -> IO Player
+takeTurn table_cards player
+    | playerFolded player = return player
+    | otherwise           = do
+          let name = playerName player
+          putStrLn $ concat [name, "'s turn!"]
+          action <- case playerType player of
+                        Human -> humanTurn player table_cards
+                        CPU   -> return $ cpuTurn player table_cards
+          case action of
+              Call -> putStrLn $ concat [name, " calls!"]
+              Fold -> putStrLn $ concat [name, " folds!"]
+          return $ (\(Player t n h f) -> Player t n h (action==Fold)) player
+
+-- Take a Human turn
+humanTurn :: Player -> [Card] -> IO PlayerAction
+humanTurn player table_cards = do
+    putStrLn $ "Your hand: " ++ showMany (playerHand player)
+    putStrLn $ "Table cards: " ++ showMany table_cards
+    prompt parseAction "Call/Fold? (c/f)"
+
+-- Parse an action for a human turn.
+parseAction :: String -> Either String PlayerAction
+parseAction response
+    | map toLower response `elem` ["call", "c"] = Right Call
+    | map toLower response `elem` ["fold", "f"] = Right Fold
+    | otherwise = Left "Must answer \"Call\" or \"Fold\""
+
+-- Take a CPU turn
+-- CPUs always call on their first turn.
+-- On subsequent hands, CPUs call if their hand doesn't give them anything new
+-- over what is already on the table
+cpuTurn :: Player -> [Card] -> PlayerAction
+cpuTurn player [] = Call
+cpuTurn player table_cards =
+    let own_cards = playerHand player in
+    if bestHand (own_cards++table_cards) > bestHand table_cards
+    then Call
+    else Fold
 
 -- Repeatedly prompts the user using query until parser returns a Right value
 prompt :: Show e => (String -> Either e a) -> String -> IO a
@@ -47,17 +111,21 @@ prompt parser query = do
                        putStrLn ("Invalid response: " ++ show e)
                        prompt parser query
 
--- Deals a game of Texas Hold'em, using deck stored in a SafeDeckState
-dealTexasHoldem :: Int -> SafeDeckState TexasHoldemDeal
-dealTexasHoldem nplayers = do
-    hs <- replicateM nplayers (replicateM 2 dealCard)
-    dealCard -- burn one
-    f  <- replicateM 3 dealCard
-    dealCard -- burn one
-    t  <- dealCard
-    dealCard -- burn one
-    r  <- dealCard
-    return $ TexasHoldemDeal hs f t r
+-- Uses player_types to create a list of players, and deals a game of Texas
+-- Hold'em to the players using a deck stored in a SafeDeckState
+-- Returns list of created players, and the TexasHoldemDeal
+dealTexasHoldem :: [PlayerType] -> SafeDeckState ([Player], TexasHoldemDeal)
+dealTexasHoldem player_types = do
+    players <- forM (zip [1..] player_types) $ \(pnum, ptype) -> do
+                   hand <- replicateM 2 dealCard
+                   return $ Player ptype pnum hand False
+    dealCard -- burn a card
+    flop  <- replicateM 3 dealCard
+    dealCard -- burn a card
+    turn  <- dealCard
+    dealCard -- burn a card
+    river  <- dealCard
+    return (players, TexasHoldemDeal flop turn river)
 
 -- Deals a single card, using deck stored in a SafeDeckState
 dealCard :: SafeDeckState Card
@@ -78,19 +146,13 @@ bestHand cards =
         bestFourOfAKind   cards <|>
         bestFullHouse     cards <|>
         bestFlush         cards <|>
-        bestStraight       cards <|>
+        bestStraight      cards <|>
         bestThreeOfAKind  cards <|>
         bestTwoPair       cards <|>
         bestPair          cards
     of
         Just hand_rank -> hand_rank
         Nothing        -> highCard cards
-
-hand1 = [Card Ace Spades, Card Two Hearts, Card King Diamonds, Card King Spades, Card Two Clubs, Card King Clubs, Card Jack Diamonds]
-hand2 = [Card Two Clubs, Card Six Hearts, Card Seven Hearts, Card Eight Hearts, Card Nine Hearts, Card Ten Hearts, Card Ace Spades]
-hand3 = [Card Six Hearts, Card Seven Hearts, Card Eight Hearts, Card Nine Hearts, Card Ten Hearts, Card Jack Spades, Card Jack Hearts]
-hand4 = [Card Two Clubs, Card Two Hearts, Card King Hearts, Card Nine Hearts, Card King Clubs, Card Two Spades, Card Two Diamonds]
-hand5 = [Card Three Clubs, Card Three Hearts, Card King Hearts, Card Nine Hearts, Card King Clubs, Card King Spades, Card Three Diamonds]
 
 -- Returns best straight-flush in given list of cards, or nothing
 bestStraightFlush :: [Card] -> Maybe HandRank
@@ -220,6 +282,19 @@ getRandomR lo hi = do
 descending :: Ord a => [a] -> [a]
 descending = sortBy (flip compare)
 
+descendingBy :: (a -> a -> Ordering) => [a] -> [a]
+descendingBy f = sortBy (flip f)
+
+showMany :: Show a => [a] -> String
+showMany = intercalate ", " . map show
+
+playerName :: Player -> String
+playerName player =
+    let pnum = show $ playerNum player
+        ptype = show $ playerType player
+    in
+        concat ["Player ", pnum, " (", ptype, ")"]
+
 -- Below are a number of data/type declarations, which build up the
 -- fundamentals of Texas Hold'em
 
@@ -246,7 +321,6 @@ type Hand = [Card]
 type Kickers = [Card]
 
 data TexasHoldemDeal = TexasHoldemDeal {
-      hands :: [Hand],
       flop  :: [Card],
       turn  :: Card,
       river :: Card
@@ -262,7 +336,38 @@ data HandRank = HighCard Card Kickers
                 | ThreeOfAKind [Card] Kickers
                 | Straight [Card]
                 | Flush [Card]
-                | FullHouse [Card] [Card] --triplet, pair
+                | FullHouse [Card] [Card] -- sets of cards are triplet, pair
                 | FourOfAKind [Card] Kickers
                 | StraightFlush [Card]
-                deriving (Eq, Ord, Show)
+                deriving (Eq, Ord)
+
+instance Show HandRank where
+    show (HighCard c ks) = concat ["High Card (", show c, ") ", showKickers ks]
+    show (Pair cs ks) = concat ["Pair (", showMany cs, ") ", showKickers ks]
+    show (TwoPair cs k) = concat ["Two Pair (", showMany cs, ") ", showKicker k]
+    show (ThreeOfAKind cs ks) = concat ["Three-of-a-Kind (", showMany cs, ") ",
+                                      showKickers ks]
+    show (Straight cs) = concat ["Straight (", showMany cs, ") "]
+    show (Flush cs) = concat ["Flush (", showMany cs, ") "]
+    show (FullHouse t p) = concat ["FullHouse (", showMany (t++p), ") "]
+    show (FourOfAKind cs k) = concat ["Four-of-a-Kind (", showMany cs, ")",
+                                    showKicker k]
+    show (StraightFlush cs) = concat ["Straight Flush (", showMany cs, ") "]
+
+showKicker :: Kickers -> String
+showKicker k = concat ["(Kicker: ", showMany k, ")"]
+
+showKickers :: Kickers -> String
+showKickers k = concat ["(Kickers: ", showMany k, ")"]
+
+data PlayerType = Human | CPU
+                  deriving Show
+data Player = Player {
+      playerType   :: PlayerType,
+      playerNum    :: Int,
+      playerHand   :: Hand,
+      playerFolded :: Bool
+    }
+
+data PlayerAction = Call | Fold
+                    deriving Eq
